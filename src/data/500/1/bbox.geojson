@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "bbox",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::32613" } },
+"features": [
+{ "type": "Feature", "properties": { }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 769875.0, 3933375.0 ], [ 769875.0, 3965250.0 ], [ 738000.0, 3965250.0 ], [ 738000.0, 3933375.0 ], [ 769875.0, 3933375.0 ] ] ] } }
+]
+}

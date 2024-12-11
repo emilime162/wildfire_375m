@@ -26,8 +26,8 @@ DEFAULT_PARAMS = [
     "pressure",                  # Surface pressure (Pa) - related to weather conditions and fire behavior.
     "wind_u",                    # U wind component at 10 meters above the surface (m/s) - horizontal wind in the east-west direction.
     "wind_v",                    # V wind component at 10 meters above the surface (m/s) - horizontal wind in the north-south direction.
-    "longwave_radiation",        # Surface downward longwave radiation (W/m²) - energy balance affecting temperature and humidity.
-    "shortwave_radiation",       # Surface downward shortwave radiation (W/m²) - impacts surface temperature.
+    #"longwave_radiation",        # Surface downward longwave radiation (W/m²) - energy balance affecting temperature and humidity.
+    #"shortwave_radiation",       # Surface downward shortwave radiation (W/m²) - impacts surface temperature.
     "potential_evaporation",     # Potential evaporation (kg/m²) - indicates dryness and fire-prone conditions.
     "total_precipitation"        # Hourly total precipitation (kg/m²) - critical for assessing wet or dry conditions.
 ]
