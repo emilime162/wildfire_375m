@@ -1,30 +1,23 @@
-import json
 import os
-from datetime import datetime
-import ee
-from shapely.geometry import box as sg_box
-from shapely.ops import transform as shapely_tf
-from pyproj import Transformer
+import json
+import math
 from datetime import datetime, timedelta
-import numpy as np
 from zipfile import ZipFile
-import math # for elevation method
+
+import ee
+import numpy as np
+from shapely.ops import transform as shapely_tf
 import affine
 import geopandas as gpd
 import pandas as pd
 import pyproj
 import rasterio
-import requests
-import xarray as xarr
 from geocube.api.core import make_geocube
 from pyproj import CRS
-from rasterio.enums import Resampling
 from shapely.geometry import mapping, MultiPoint, shape
 from shapely.ops import transform, nearest_points
-from shapely.ops import transform as shapely_tf
 from sklearn.cluster import DBSCAN
 
-from src.constants import DEFAULT_PARAMS, CHIP_SIZE
 from src.geospatial import (
     build_vrt,
     buffer_point,
@@ -32,6 +25,12 @@ from src.geospatial import (
     bounds_to_geojson,
     read_geospatial_file,
 )
+from src.constants import GEE_PROJECT_ID, DEFAULT_SPATIAL_RESOLUTION, TARGET_EPSG_CODE, TARGET_CRS, CHIP_SPACE_LENGTH
+
+try:
+    ee.Initialize(project=GEE_PROJECT_ID)  # Use your project ID
+except ee.EEException:
+    print("Earth Engine is already initialized.")
 
 
 def unzip_csvs(zip_file):
@@ -115,9 +114,9 @@ def create_chip_bounds(clustered_fires):
         )
         chip = make_geocube(
             vector_data=gpd.GeoDataFrame(
-                geometry=[central_fire_point], crs="EPSG:4326"
+                geometry=[central_fire_point], crs=TARGET_CRS
             ),
-            resolution=(-375, 375),
+            resolution=(-DEFAULT_SPATIAL_RESOLUTION, DEFAULT_SPATIAL_RESOLUTION),
             output_crs=utm_crs,
             geom=bbox_4326_geojson,
         )
@@ -142,14 +141,14 @@ def fires_from_topleft(top_left, epsg_code, date_to_query, fires):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + 32000,
-            bottom=top_left[0] - 32000,
+            right=top_left[1] + CHIP_SPACE_LENGTH,
+            bottom=top_left[0] - CHIP_SPACE_LENGTH,
             top=top_left[0],
         )
     )
     # reproj the bbox from utm to 4326
     utm_to_wgs84_transformer = pyproj.Transformer.from_crs(
-        epsg_code, 4326, always_xy=True
+        epsg_code, TARGET_EPSG_CODE, always_xy=True
     ).transform
     aoi_wgs84 = shapely_tf(utm_to_wgs84_transformer, shape(aoi))
 
@@ -157,14 +156,14 @@ def fires_from_topleft(top_left, epsg_code, date_to_query, fires):
     if isinstance(fires, str):
         fires_in_chip = gpd.read_file(fires, layer="merge", bbox=aoi_wgs84)
     else:
-        chip_poly = gpd.GeoDataFrame(geometry=[aoi_wgs84], crs="EPSG:4326")
+        chip_poly = gpd.GeoDataFrame(geometry=[aoi_wgs84], crs=TARGET_CRS)
         fires_in_chip = fires[fires["acq_date"] == date_to_query].clip(chip_poly)
 
     fires_in_chip = fires_in_chip[fires_in_chip["acq_date"] == date_to_query]
 
     if fires_in_chip.empty:
         # possible if fire dies "next day"
-        fires_in_chip = gpd.GeoDataFrame(geometry=[aoi_wgs84.centroid], crs="EPSG:4326")
+        fires_in_chip = gpd.GeoDataFrame(geometry=[aoi_wgs84.centroid], crs=TARGET_CRS)
         fires_in_chip["bool"] = 0
         fires_in_chip["frp"] = 0
     else:
@@ -180,62 +179,71 @@ def fires_from_topleft(top_left, epsg_code, date_to_query, fires):
     fire_array = make_geocube(
         vector_data=fires_in_chip,
         measurements=["bool", "frp"],
-        resolution=(-375, 375),
+        resolution=(-DEFAULT_SPATIAL_RESOLUTION, DEFAULT_SPATIAL_RESOLUTION),
         output_crs=epsg_code,
         fill=0,
         geom=bbox_4326_geojson,
     )
     return fire_array
 
-import ee
-import numpy as np
-from datetime import datetime, timedelta
-from pyproj import Transformer
-from shapely.geometry import box as sg_box
 
-def ndvi_from_topleft(top_left, epsg, date, resolution=375):
+def population_from_topleft(top_left, epsg, date_to_query):
+    """
+    Given input chip parameters, load population data from GEE GHSL dataset and reproject to the chip CRS
+    :param top_left: list of the top left coordinates of the chip
+    :param epsg: EPSG code for top_left
+    :param date_to_query: date to load data for as string '2021-05-01'
+    :return: numpy array of the population data
+    """
+    year = datetime.strptime(date_to_query, "%Y-%m-%d").year
+    # Create bounding box for the area of interest
+    aoi = bounds_to_geojson(
+        rasterio.coords.BoundingBox(
+            left=top_left[1],
+            right=top_left[1] + CHIP_SPACE_LENGTH,
+            bottom=top_left[0] - CHIP_SPACE_LENGTH,
+            top=top_left[0],
+        )
+    )
+    # Convert the AOI to GEE geometry
+    aoi_4326 = reproject_coordinates(aoi, epsg, TARGET_EPSG_CODE)
+    region = ee.Geometry(aoi_4326)
+    # Get the closest year
+    remain = year % 5
+    comple = 5 - remain
+    valid_year = year + comple if remain > 2 else year - remain
+    # Filter to get the population data for the specified year
+    population = ee.Image(f'JRC/GHSL/P2023A/GHS_POP/{valid_year}')
+    population_data = population.reproject(crs=f'EPSG:{epsg}', scale=375).sampleRectangle(region).getInfo()
+    population_array = np.array(population_data['properties']['population_count'])
+    population_array = np.nan_to_num(population_array, nan=0.0, posinf=0.0, neginf=0.0)
+    return population_array
+
+
+def ndvi_from_topleft(top_left, epsg, date):
     """
     Fetch vegetation data from the NASA/VIIRS/002/VNP13A1 dataset on GEE.
 
     :param topleft: Coordinates of the top-left corner of the AOI [latitude, longitude].
     :param epsg_code: EPSG code for the coordinate system of the AOI.
     :param date: Date string (YYYY-MM-DD) for querying data.
-    :param resolution: Resolution to resample the data (default: 375 meters).
     :return: Dictionary with data arrays for the specified parameters.
     """
-    try:
-        ee.Initialize(project='cultivated-card-441523-g2')  # Use your project ID
-    except ee.EEException:
-        print("Earth Engine is already initialized.")
-
     # Parse the date
     date_to_query = datetime.strptime(date, "%Y-%m-%d")
-    #start_date = date_to_query.strftime('%Y-%m-%d')
     start_date = date_to_query.strftime('%Y-%m-%d')
-
-    #end_date = (date_to_query + timedelta(days=1)).strftime('%Y-%m-%d')
     end_date = (date_to_query + timedelta(days=15)).strftime('%Y-%m-%d')
-
-
-    # Define AOI geometry in EPSG:4326
-    # transformer = Transformer.from_crs(epsg_code, 4326, always_xy=True)
-    # bottom_right = transformer.transform(topleft[1] + 32000, topleft[0] - 32000)
-    # top_left = transformer.transform(topleft[1], topleft[0])
-    # aoi_geometry = sg_box(top_left[0], bottom_right[1], bottom_right[0], top_left[1])
-    # aoi = ee.Geometry.Polygon([list(aoi_geometry.exterior.coords)])
-    #print("AOI Geometry:", aoi.getInfo())
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + 32000,
-            bottom=top_left[0] - 32000,
+            right=top_left[1] + CHIP_SPACE_LENGTH,
+            bottom=top_left[0] - CHIP_SPACE_LENGTH,
             top=top_left[0],
         )
     )
-    aoi_4326 = reproject_coordinates(aoi, epsg, 4326)
+    aoi_4326 = reproject_coordinates(aoi, epsg, TARGET_EPSG_CODE)
     aoi = ee.Geometry(aoi_4326)
 
-    
     # Load the VNP13A1 dataset
     try:
         vegetation = ee.ImageCollection("NASA/VIIRS/002/VNP13A1") \
@@ -249,38 +257,29 @@ def ndvi_from_topleft(top_left, epsg, date, resolution=375):
     except Exception as e:
         print(f"Error loading or filtering the image collection: {e}")
         raise
-    print("loaded")  
     # Select NDVI band and resample
     try:
         ndvi_data = vegetation.select("NDVI").mean().reproject(
-            f'EPSG:{epsg}', scale=resolution
+            f'EPSG:{epsg}', scale=DEFAULT_SPATIAL_RESOLUTION
         )
-
-
- 
         # Extract raster data
         data = ndvi_data.sampleRectangle(region=aoi).getInfo()
         if not data:
             print("No NDVI data found for the specified AOI and date.")
             return None
-
-
         # Convert the raster data into a NumPy array
         ndvi_array = np.array(data['properties']['NDVI'])
         print(f"Fetched NDVI raster with shape {ndvi_array.shape}.")
         return ndvi_array
-
     except Exception as e:
         print(f"Error fetching NDVI data: {e}")
         return None
-
 
 
 def elevation_from_topleft(top_left, epsg, resolution=30):
     """
     Given input chip parameters, load elevation data and reproject to the chip CRS.
     This version calculates DEM tile names directly based on AOI.
-    
     :param top_left: list of the top-left coordinates of the chip [latitude, longitude]
     :param epsg: EPSG code for the chip CRS
     :param resolution: Resolution of DEM in arc seconds (default: 30 for GLO-30)
@@ -290,12 +289,12 @@ def elevation_from_topleft(top_left, epsg, resolution=30):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + 32000,
-            bottom=top_left[0] - 32000,
+            right=top_left[1] + CHIP_SPACE_LENGTH,
+            bottom=top_left[0] - CHIP_SPACE_LENGTH,
             top=top_left[0],
         )
     )
-    aoi_4326 = reproject_coordinates(aoi, epsg, 4326)
+    aoi_4326 = reproject_coordinates(aoi, epsg, TARGET_EPSG_CODE)
 
     aoi_bounds = shape(aoi_4326).bounds  # Get (minx, miny, maxx, maxy) in longitude/latitude
     left, bottom, right, top = aoi_bounds
@@ -313,11 +312,7 @@ def elevation_from_topleft(top_left, epsg, resolution=30):
                 tiles.append(tile_name)
         return tiles
 
-
-
     dem_tiles = get_tile_names(top, bottom, left, right, resolution)
-
-
     # Construct paths for tiles
     dem_root = "/vsis3/copernicus-dem-90m"
     file_paths = [f"{dem_root}/{tile}/{tile}.tif" for tile in dem_tiles]
@@ -328,12 +323,10 @@ def elevation_from_topleft(top_left, epsg, resolution=30):
     # Open the VRT and read the elevation data
     with rasterio.open(vrt_path) as src:
         dst_crs = CRS.from_epsg(epsg)
-        dst_transform = affine.Affine(375, 0.0, top_left[1], 0.0, -375, top_left[0])
+        dst_transform = affine.Affine(DEFAULT_SPATIAL_RESOLUTION, 0.0, top_left[1], 0.0, -DEFAULT_SPATIAL_RESOLUTION, top_left[0])
         elevation_data, tf = read_geospatial_file(aoi, dst_crs, dst_transform, src)
         os.remove(vrt_path)  # Clean up temporary VRT file
     return elevation_data[0]
-
-
 
 
 def landcover_from_topleft(top_left, epsg):
@@ -346,24 +339,21 @@ def landcover_from_topleft(top_left, epsg):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + 32000,
-            bottom=top_left[0] - 32000,
+            right=top_left[1] + CHIP_SPACE_LENGTH,
+            bottom=top_left[0] - CHIP_SPACE_LENGTH,
             top=top_left[0],
         )
     )
-
     with rasterio.open(
         "s3://esa-worldcover/v100/2020/ESA_WorldCover_10m_2020_v100_Map_AWS.vrt"
     ) as src:
         dst_crs = CRS.from_epsg(epsg)
-        dst_transform = affine.Affine(375, 0.0, top_left[1], 0.0, -375, top_left[0])
+        dst_transform = affine.Affine(DEFAULT_SPATIAL_RESOLUTION, 0.0, top_left[1], 0.0, -DEFAULT_SPATIAL_RESOLUTION, top_left[0])
         landcover_data, tf = read_geospatial_file(aoi, dst_crs, dst_transform, src)
     return landcover_data[0]
 
 
-
-
-def atmospheric_from_topleft(top_left, epsg, date, params, resolution=375):
+def atmospheric_from_topleft(top_left, epsg, date, params):
     """
     Fetch hourly NLDAS data from GEE for a specific date and region.
 
@@ -374,11 +364,6 @@ def atmospheric_from_topleft(top_left, epsg, date, params, resolution=375):
     :return: Dictionary with hourly data arrays for the specified parameters.
     """
     # Parse the date and define start/end times
-    try:
-        ee.Initialize(project='cultivated-card-441523-g2')  # Use your project ID
-    except ee.EEException:
-        print("Earth Engine is already initialized.")
-    #print("start atmospheric data reading")
     date_to_query = datetime.strptime(date, "%Y-%m-%d")
     start_date = date_to_query.strftime('%Y-%m-%dT00:00')
     end_date = (date_to_query + timedelta(days=1)).strftime('%Y-%m-%dT00:00')
@@ -386,12 +371,12 @@ def atmospheric_from_topleft(top_left, epsg, date, params, resolution=375):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + 32000,
-            bottom=top_left[0] - 32000,
+            right=top_left[1] + CHIP_SPACE_LENGTH,
+            bottom=top_left[0] - CHIP_SPACE_LENGTH,
             top=top_left[0],
         )
     )
-    aoi_4326 = reproject_coordinates(aoi, epsg, 4326)
+    aoi_4326 = reproject_coordinates(aoi, epsg, TARGET_EPSG_CODE)
     region = ee.Geometry(aoi_4326)
     # Load the NLDAS dataset
     nldas = ee.ImageCollection("NASA/NLDAS/FORA0125_H002").filterBounds(region).filterDate(start_date, end_date)
@@ -400,13 +385,11 @@ def atmospheric_from_topleft(top_left, epsg, date, params, resolution=375):
     # Fetch each parameter
     for param in params:
         try:
-            # Select parameter and reproject to specified resolution
-            param_data = nldas.select(param).mean().reproject(crs=f'EPSG:{epsg}', scale=resolution)
+            param_data = nldas.select(param).mean().reproject(crs=f'EPSG:{epsg}', scale=DEFAULT_SPATIAL_RESOLUTION)
             data = param_data.sampleRectangle(region=region).getInfo()
             param_array = np.array(data['properties'][param])
             param_array = np.nan_to_num(param_array, nan=0.0, posinf=0.0, neginf=0.0)
             results[param] = param_array
-            breakpoint()
         except Exception as e:
             print(f"Error fetching parameter '{param}': {e}")
             results[param] = None
