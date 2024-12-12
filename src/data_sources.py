@@ -186,6 +186,39 @@ def fires_from_topleft(top_left, epsg_code, date_to_query, fires):
     return fire_array
 
 
+def population_from_topleft(top_left, epsg, date_to_query):
+    """
+    Given input chip parameters, load population data from GEE GHSL dataset and reproject to the chip CRS
+    :param top_left: list of the top left coordinates of the chip
+    :param epsg: EPSG code for top_left
+    :param date_to_query: date to load data for as string '2021-05-01'
+    :return: numpy array of the population data
+    """
+    year = datetime.strptime(date_to_query, "%Y-%m-%d").year
+    # Create bounding box for the area of interest
+    aoi = bounds_to_geojson(
+        rasterio.coords.BoundingBox(
+            left=top_left[1],
+            right=top_left[1] + 32000,
+            bottom=top_left[0] - 32000,
+            top=top_left[0],
+        )
+    )
+    # Convert the AOI to GEE geometry
+    aoi_4326 = reproject_coordinates(aoi, epsg, 4326)
+    region = ee.Geometry(aoi_4326)
+    # Get the closest year
+    remain = year % 5
+    comple = 5 - remain
+    valid_year = year + comple if remain > 2 else year - remain
+    # Filter to get the population data for the specified year
+    population = ee.Image(f'JRC/GHSL/P2023A/GHS_POP/{valid_year}')
+    population_data = population.reproject(crs=f'EPSG:{epsg}', scale=375).sampleRectangle(region).getInfo()
+    population_array = np.array(population_data['properties']['population_count'])
+    population_array = np.nan_to_num(population_array, nan=0.0, posinf=0.0, neginf=0.0)
+    return population_array
+
+
 def ndvi_from_topleft(top_left, epsg, date):
     """
     Fetch vegetation data from the NASA/VIIRS/002/VNP13A1 dataset on GEE.
