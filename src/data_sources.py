@@ -193,7 +193,7 @@ from datetime import datetime, timedelta
 from pyproj import Transformer
 from shapely.geometry import box as sg_box
 
-def ndvi_from_topleft(topleft, epsg_code, date, resolution=375):
+def ndvi_from_topleft(top_left, epsg, date, resolution=375):
     """
     Fetch vegetation data from the NASA/VIIRS/002/VNP13A1 dataset on GEE.
 
@@ -218,13 +218,23 @@ def ndvi_from_topleft(topleft, epsg_code, date, resolution=375):
 
 
     # Define AOI geometry in EPSG:4326
-    transformer = Transformer.from_crs(epsg_code, 4326, always_xy=True)
-    bottom_right = transformer.transform(topleft[1] + 32000, topleft[0] - 32000)
-    top_left = transformer.transform(topleft[1], topleft[0])
-    aoi_geometry = sg_box(top_left[0], bottom_right[1], bottom_right[0], top_left[1])
-    aoi = ee.Geometry.Polygon([list(aoi_geometry.exterior.coords)])
+    # transformer = Transformer.from_crs(epsg_code, 4326, always_xy=True)
+    # bottom_right = transformer.transform(topleft[1] + 32000, topleft[0] - 32000)
+    # top_left = transformer.transform(topleft[1], topleft[0])
+    # aoi_geometry = sg_box(top_left[0], bottom_right[1], bottom_right[0], top_left[1])
+    # aoi = ee.Geometry.Polygon([list(aoi_geometry.exterior.coords)])
     #print("AOI Geometry:", aoi.getInfo())
-    
+    aoi = bounds_to_geojson(
+        rasterio.coords.BoundingBox(
+            left=top_left[1],
+            right=top_left[1] + 32000,
+            bottom=top_left[0] - 32000,
+            top=top_left[0],
+        )
+    )
+    aoi_4326 = reproject_coordinates(aoi, epsg, 4326)
+    aoi = ee.Geometry(aoi_4326)
+
     
     # Load the VNP13A1 dataset
     try:
@@ -243,7 +253,7 @@ def ndvi_from_topleft(topleft, epsg_code, date, resolution=375):
     # Select NDVI band and resample
     try:
         ndvi_data = vegetation.select("NDVI").mean().reproject(
-            crs='EPSG:4326', scale=resolution
+            f'EPSG:{epsg}', scale=resolution
         )
 
 
@@ -346,79 +356,58 @@ def landcover_from_topleft(top_left, epsg):
         "s3://esa-worldcover/v100/2020/ESA_WorldCover_10m_2020_v100_Map_AWS.vrt"
     ) as src:
         dst_crs = CRS.from_epsg(epsg)
-        dst_transform = affine.Affine(500, 0.0, top_left[1], 0.0, -500, top_left[0])
+        dst_transform = affine.Affine(375, 0.0, top_left[1], 0.0, -375, top_left[0])
         landcover_data, tf = read_geospatial_file(aoi, dst_crs, dst_transform, src)
     return landcover_data[0]
 
 
 
 
-
-def atmospheric_from_topleft(topleft, epsg_code, date, params,resolution=375):
+def atmospheric_from_topleft(top_left, epsg, date, params, resolution=375):
     """
     Fetch hourly NLDAS data from GEE for a specific date and region.
 
     :param topleft: Coordinates of the top-left corner of the AOI [latitude, longitude].
-    :param epsg_code: EPSG code for the coordinate system of the AOI.
+    :param epsg: EPSG code for the coordinate system of the AOI.
     :param date: Date string (YYYY-MM-DD) for querying data.
     :param params: List of desired bands/parameters to fetch (e.g., 'TMP_2maboveground').
     :return: Dictionary with hourly data arrays for the specified parameters.
     """
-    # Initialize Earth Engine (with your project)
+    # Parse the date and define start/end times
     try:
         ee.Initialize(project='cultivated-card-441523-g2')  # Use your project ID
     except ee.EEException:
         print("Earth Engine is already initialized.")
-        
-
-    # Parse the date and define start/end times
+    #print("start atmospheric data reading")
     date_to_query = datetime.strptime(date, "%Y-%m-%d")
     start_date = date_to_query.strftime('%Y-%m-%dT00:00')
     end_date = (date_to_query + timedelta(days=1)).strftime('%Y-%m-%dT00:00')
 
-    # Define AOI geometry in EPSG:4326
-    transformer = Transformer.from_crs(epsg_code, 4326, always_xy=True)
-    bottom_right = transformer.transform(topleft[1] + 32000, topleft[0] - 32000)
-    top_left = transformer.transform(topleft[1], topleft[0])
-    aoi_geometry = sg_box(top_left[0], bottom_right[1], bottom_right[0], top_left[1])
-    aoi = ee.Geometry.Polygon([list(aoi_geometry.exterior.coords)])
-
+    aoi = bounds_to_geojson(
+        rasterio.coords.BoundingBox(
+            left=top_left[1],
+            right=top_left[1] + 32000,
+            bottom=top_left[0] - 32000,
+            top=top_left[0],
+        )
+    )
+    aoi_4326 = reproject_coordinates(aoi, epsg, 4326)
+    region = ee.Geometry(aoi_4326)
     # Load the NLDAS dataset
-    nldas = ee.ImageCollection("NASA/NLDAS/FORA0125_H002") \
-        .filterBounds(aoi) \
-        .filterDate(start_date, end_date)
-
+    nldas = ee.ImageCollection("NASA/NLDAS/FORA0125_H002").filterBounds(region).filterDate(start_date, end_date)
     # Create a dictionary to hold hourly data
     results = {}
-
     # Fetch each parameter
-
     for param in params:
         try:
             # Select parameter and reproject to specified resolution
-            param_data = nldas.select(param).mean().reproject(
-                crs='EPSG:4326', scale=resolution,
-            )
-
-            # Extract raster data
-            data = param_data.sampleRectangle(region=aoi).getInfo()
-
-            # Explicitly check for missing or empty data
-            if 'properties' not in data or param not in data['properties']:
-                print(f"No data found for parameter '{param}'.")
-                results[param] = None
-                continue
-
-            # Convert the raster data into a NumPy array
-            raster = np.array(data['properties'][param])
-            raster = np.nan_to_num(raster, nan=0.0, posinf=0.0, neginf=0.0)  # Replace NaN and Inf with 0
-
-
-            results[param] = raster  # Store the raster in the results dictionary
-            print(f"Fetched raster for parameter '{param}' with shape {raster.shape}.")
-
+            param_data = nldas.select(param).mean().reproject(crs=f'EPSG:{epsg}', scale=resolution)
+            data = param_data.sampleRectangle(region=region).getInfo()
+            param_array = np.array(data['properties'][param])
+            param_array = np.nan_to_num(param_array, nan=0.0, posinf=0.0, neginf=0.0)
+            results[param] = param_array
+            breakpoint()
         except Exception as e:
             print(f"Error fetching parameter '{param}': {e}")
             results[param] = None
     return results
-
