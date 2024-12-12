@@ -25,12 +25,13 @@ from src.geospatial import (
     bounds_to_geojson,
     read_geospatial_file,
 )
-from src.constants import GEE_PROJECT_ID, DEFAULT_SPATIAL_RESOLUTION
+from src.constants import GEE_PROJECT_ID, DEFAULT_SPATIAL_RESOLUTION, TARGET_EPSG_CODE, TARGET_CRS, CHIP_SPACE_LENGTH
 
 try:
     ee.Initialize(project=GEE_PROJECT_ID)  # Use your project ID
 except ee.EEException:
     print("Earth Engine is already initialized.")
+
 
 def unzip_csvs(zip_file):
     """
@@ -113,7 +114,7 @@ def create_chip_bounds(clustered_fires):
         )
         chip = make_geocube(
             vector_data=gpd.GeoDataFrame(
-                geometry=[central_fire_point], crs="EPSG:4326"
+                geometry=[central_fire_point], crs=TARGET_CRS
             ),
             resolution=(-DEFAULT_SPATIAL_RESOLUTION, DEFAULT_SPATIAL_RESOLUTION),
             output_crs=utm_crs,
@@ -140,14 +141,14 @@ def fires_from_topleft(top_left, epsg_code, date_to_query, fires):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + 32000,
-            bottom=top_left[0] - 32000,
+            right=top_left[1] + CHIP_SPACE_LENGTH,
+            bottom=top_left[0] - CHIP_SPACE_LENGTH,
             top=top_left[0],
         )
     )
     # reproj the bbox from utm to 4326
     utm_to_wgs84_transformer = pyproj.Transformer.from_crs(
-        epsg_code, 4326, always_xy=True
+        epsg_code, TARGET_EPSG_CODE, always_xy=True
     ).transform
     aoi_wgs84 = shapely_tf(utm_to_wgs84_transformer, shape(aoi))
 
@@ -155,14 +156,14 @@ def fires_from_topleft(top_left, epsg_code, date_to_query, fires):
     if isinstance(fires, str):
         fires_in_chip = gpd.read_file(fires, layer="merge", bbox=aoi_wgs84)
     else:
-        chip_poly = gpd.GeoDataFrame(geometry=[aoi_wgs84], crs="EPSG:4326")
+        chip_poly = gpd.GeoDataFrame(geometry=[aoi_wgs84], crs=TARGET_CRS)
         fires_in_chip = fires[fires["acq_date"] == date_to_query].clip(chip_poly)
 
     fires_in_chip = fires_in_chip[fires_in_chip["acq_date"] == date_to_query]
 
     if fires_in_chip.empty:
         # possible if fire dies "next day"
-        fires_in_chip = gpd.GeoDataFrame(geometry=[aoi_wgs84.centroid], crs="EPSG:4326")
+        fires_in_chip = gpd.GeoDataFrame(geometry=[aoi_wgs84.centroid], crs=TARGET_CRS)
         fires_in_chip["bool"] = 0
         fires_in_chip["frp"] = 0
     else:
@@ -199,13 +200,13 @@ def population_from_topleft(top_left, epsg, date_to_query):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + 32000,
-            bottom=top_left[0] - 32000,
+            right=top_left[1] + CHIP_SPACE_LENGTH,
+            bottom=top_left[0] - CHIP_SPACE_LENGTH,
             top=top_left[0],
         )
     )
     # Convert the AOI to GEE geometry
-    aoi_4326 = reproject_coordinates(aoi, epsg, 4326)
+    aoi_4326 = reproject_coordinates(aoi, epsg, TARGET_EPSG_CODE)
     region = ee.Geometry(aoi_4326)
     # Get the closest year
     remain = year % 5
@@ -235,12 +236,12 @@ def ndvi_from_topleft(top_left, epsg, date):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + 32000,
-            bottom=top_left[0] - 32000,
+            right=top_left[1] + CHIP_SPACE_LENGTH,
+            bottom=top_left[0] - CHIP_SPACE_LENGTH,
             top=top_left[0],
         )
     )
-    aoi_4326 = reproject_coordinates(aoi, epsg, 4326)
+    aoi_4326 = reproject_coordinates(aoi, epsg, TARGET_EPSG_CODE)
     aoi = ee.Geometry(aoi_4326)
 
     # Load the VNP13A1 dataset
@@ -288,12 +289,12 @@ def elevation_from_topleft(top_left, epsg, resolution=30):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + 32000,
-            bottom=top_left[0] - 32000,
+            right=top_left[1] + CHIP_SPACE_LENGTH,
+            bottom=top_left[0] - CHIP_SPACE_LENGTH,
             top=top_left[0],
         )
     )
-    aoi_4326 = reproject_coordinates(aoi, epsg, 4326)
+    aoi_4326 = reproject_coordinates(aoi, epsg, TARGET_EPSG_CODE)
 
     aoi_bounds = shape(aoi_4326).bounds  # Get (minx, miny, maxx, maxy) in longitude/latitude
     left, bottom, right, top = aoi_bounds
@@ -338,8 +339,8 @@ def landcover_from_topleft(top_left, epsg):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + 32000,
-            bottom=top_left[0] - 32000,
+            right=top_left[1] + CHIP_SPACE_LENGTH,
+            bottom=top_left[0] - CHIP_SPACE_LENGTH,
             top=top_left[0],
         )
     )
@@ -370,12 +371,12 @@ def atmospheric_from_topleft(top_left, epsg, date, params):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + 32000,
-            bottom=top_left[0] - 32000,
+            right=top_left[1] + CHIP_SPACE_LENGTH,
+            bottom=top_left[0] - CHIP_SPACE_LENGTH,
             top=top_left[0],
         )
     )
-    aoi_4326 = reproject_coordinates(aoi, epsg, 4326)
+    aoi_4326 = reproject_coordinates(aoi, epsg, TARGET_EPSG_CODE)
     region = ee.Geometry(aoi_4326)
     # Load the NLDAS dataset
     nldas = ee.ImageCollection("NASA/NLDAS/FORA0125_H002").filterBounds(region).filterDate(start_date, end_date)
