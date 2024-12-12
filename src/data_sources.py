@@ -1,30 +1,23 @@
-import json
 import os
-from datetime import datetime
-import ee
-from shapely.geometry import box as sg_box
-from shapely.ops import transform as shapely_tf
-from pyproj import Transformer
+import json
+import math
 from datetime import datetime, timedelta
-import numpy as np
 from zipfile import ZipFile
-import math # for elevation method
+
+import ee
+import numpy as np
+from shapely.ops import transform as shapely_tf
 import affine
 import geopandas as gpd
 import pandas as pd
 import pyproj
 import rasterio
-import requests
-import xarray as xarr
 from geocube.api.core import make_geocube
 from pyproj import CRS
-from rasterio.enums import Resampling
 from shapely.geometry import mapping, MultiPoint, shape
 from shapely.ops import transform, nearest_points
-from shapely.ops import transform as shapely_tf
 from sklearn.cluster import DBSCAN
 
-from src.constants import DEFAULT_PARAMS, CHIP_SIZE
 from src.geospatial import (
     build_vrt,
     buffer_point,
@@ -32,7 +25,12 @@ from src.geospatial import (
     bounds_to_geojson,
     read_geospatial_file,
 )
+from src.constants import GEE_PROJECT_ID
 
+try:
+    ee.Initialize(project=GEE_PROJECT_ID)  # Use your project ID
+except ee.EEException:
+    print("Earth Engine is already initialized.")
 
 def unzip_csvs(zip_file):
     """
@@ -187,11 +185,6 @@ def fires_from_topleft(top_left, epsg_code, date_to_query, fires):
     )
     return fire_array
 
-import ee
-import numpy as np
-from datetime import datetime, timedelta
-from pyproj import Transformer
-from shapely.geometry import box as sg_box
 
 def ndvi_from_topleft(top_left, epsg, date, resolution=375):
     """
@@ -203,27 +196,10 @@ def ndvi_from_topleft(top_left, epsg, date, resolution=375):
     :param resolution: Resolution to resample the data (default: 375 meters).
     :return: Dictionary with data arrays for the specified parameters.
     """
-    try:
-        ee.Initialize(project='cultivated-card-441523-g2')  # Use your project ID
-    except ee.EEException:
-        print("Earth Engine is already initialized.")
-
     # Parse the date
     date_to_query = datetime.strptime(date, "%Y-%m-%d")
-    #start_date = date_to_query.strftime('%Y-%m-%d')
     start_date = date_to_query.strftime('%Y-%m-%d')
-
-    #end_date = (date_to_query + timedelta(days=1)).strftime('%Y-%m-%d')
     end_date = (date_to_query + timedelta(days=15)).strftime('%Y-%m-%d')
-
-
-    # Define AOI geometry in EPSG:4326
-    # transformer = Transformer.from_crs(epsg_code, 4326, always_xy=True)
-    # bottom_right = transformer.transform(topleft[1] + 32000, topleft[0] - 32000)
-    # top_left = transformer.transform(topleft[1], topleft[0])
-    # aoi_geometry = sg_box(top_left[0], bottom_right[1], bottom_right[0], top_left[1])
-    # aoi = ee.Geometry.Polygon([list(aoi_geometry.exterior.coords)])
-    #print("AOI Geometry:", aoi.getInfo())
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
@@ -235,7 +211,6 @@ def ndvi_from_topleft(top_left, epsg, date, resolution=375):
     aoi_4326 = reproject_coordinates(aoi, epsg, 4326)
     aoi = ee.Geometry(aoi_4326)
 
-    
     # Load the VNP13A1 dataset
     try:
         vegetation = ee.ImageCollection("NASA/VIIRS/002/VNP13A1") \
@@ -249,38 +224,29 @@ def ndvi_from_topleft(top_left, epsg, date, resolution=375):
     except Exception as e:
         print(f"Error loading or filtering the image collection: {e}")
         raise
-    print("loaded")  
     # Select NDVI band and resample
     try:
         ndvi_data = vegetation.select("NDVI").mean().reproject(
             f'EPSG:{epsg}', scale=resolution
         )
-
-
- 
         # Extract raster data
         data = ndvi_data.sampleRectangle(region=aoi).getInfo()
         if not data:
             print("No NDVI data found for the specified AOI and date.")
             return None
-
-
         # Convert the raster data into a NumPy array
         ndvi_array = np.array(data['properties']['NDVI'])
         print(f"Fetched NDVI raster with shape {ndvi_array.shape}.")
         return ndvi_array
-
     except Exception as e:
         print(f"Error fetching NDVI data: {e}")
         return None
-
 
 
 def elevation_from_topleft(top_left, epsg, resolution=30):
     """
     Given input chip parameters, load elevation data and reproject to the chip CRS.
     This version calculates DEM tile names directly based on AOI.
-    
     :param top_left: list of the top-left coordinates of the chip [latitude, longitude]
     :param epsg: EPSG code for the chip CRS
     :param resolution: Resolution of DEM in arc seconds (default: 30 for GLO-30)
@@ -313,11 +279,7 @@ def elevation_from_topleft(top_left, epsg, resolution=30):
                 tiles.append(tile_name)
         return tiles
 
-
-
     dem_tiles = get_tile_names(top, bottom, left, right, resolution)
-
-
     # Construct paths for tiles
     dem_root = "/vsis3/copernicus-dem-90m"
     file_paths = [f"{dem_root}/{tile}/{tile}.tif" for tile in dem_tiles]
@@ -332,8 +294,6 @@ def elevation_from_topleft(top_left, epsg, resolution=30):
         elevation_data, tf = read_geospatial_file(aoi, dst_crs, dst_transform, src)
         os.remove(vrt_path)  # Clean up temporary VRT file
     return elevation_data[0]
-
-
 
 
 def landcover_from_topleft(top_left, epsg):
@@ -351,7 +311,6 @@ def landcover_from_topleft(top_left, epsg):
             top=top_left[0],
         )
     )
-
     with rasterio.open(
         "s3://esa-worldcover/v100/2020/ESA_WorldCover_10m_2020_v100_Map_AWS.vrt"
     ) as src:
@@ -359,8 +318,6 @@ def landcover_from_topleft(top_left, epsg):
         dst_transform = affine.Affine(375, 0.0, top_left[1], 0.0, -375, top_left[0])
         landcover_data, tf = read_geospatial_file(aoi, dst_crs, dst_transform, src)
     return landcover_data[0]
-
-
 
 
 def atmospheric_from_topleft(top_left, epsg, date, params, resolution=375):
@@ -374,11 +331,6 @@ def atmospheric_from_topleft(top_left, epsg, date, params, resolution=375):
     :return: Dictionary with hourly data arrays for the specified parameters.
     """
     # Parse the date and define start/end times
-    try:
-        ee.Initialize(project='cultivated-card-441523-g2')  # Use your project ID
-    except ee.EEException:
-        print("Earth Engine is already initialized.")
-    #print("start atmospheric data reading")
     date_to_query = datetime.strptime(date, "%Y-%m-%d")
     start_date = date_to_query.strftime('%Y-%m-%dT00:00')
     end_date = (date_to_query + timedelta(days=1)).strftime('%Y-%m-%dT00:00')
@@ -406,7 +358,6 @@ def atmospheric_from_topleft(top_left, epsg, date, params, resolution=375):
             param_array = np.array(data['properties'][param])
             param_array = np.nan_to_num(param_array, nan=0.0, posinf=0.0, neginf=0.0)
             results[param] = param_array
-            breakpoint()
         except Exception as e:
             print(f"Error fetching parameter '{param}': {e}")
             results[param] = None
