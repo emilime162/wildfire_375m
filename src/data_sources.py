@@ -355,7 +355,7 @@ def landcover_from_topleft(top_left, epsg):
 
 def atmospheric_from_topleft(top_left, epsg, date, params):
     """
-    Fetch hourly NLDAS data from GEE for a specific date and region.
+    Fetch ERA5 data from GEE for a specific date and region.
 
     :param topleft: Coordinates of the top-left corner of the AOI [latitude, longitude].
     :param epsg: EPSG code for the coordinate system of the AOI.
@@ -378,14 +378,13 @@ def atmospheric_from_topleft(top_left, epsg, date, params):
     )
     aoi_4326 = reproject_coordinates(aoi, epsg, TARGET_EPSG_CODE)
     region = ee.Geometry(aoi_4326)
-    # Load the NLDAS dataset
-    nldas = ee.ImageCollection("NASA/NLDAS/FORA0125_H002").filterBounds(region).filterDate(start_date, end_date)
+    collection = ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR").filterBounds(region).filterDate(start_date, end_date)
     # Create a dictionary to hold hourly data
     results = {}
     # Fetch each parameter
     for param in params:
         try:
-            param_data = nldas.select(param).mean().reproject(crs=f'EPSG:{epsg}', scale=DEFAULT_SPATIAL_RESOLUTION)
+            param_data = collection.select(param).mean().reproject(crs=f'EPSG:{epsg}', scale=DEFAULT_SPATIAL_RESOLUTION)
             data = param_data.sampleRectangle(region=region).getInfo()
             param_array = np.array(data['properties'][param])
             param_array = np.nan_to_num(param_array, nan=0.0, posinf=0.0, neginf=0.0)
