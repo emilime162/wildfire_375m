@@ -25,7 +25,7 @@ from src.geospatial import (
     bounds_to_geojson,
     read_geospatial_file,
 )
-from src.constants import GEE_PROJECT_ID
+from src.constants import GEE_PROJECT_ID, DEFAULT_SPATIAL_RESOLUTION
 
 try:
     ee.Initialize(project=GEE_PROJECT_ID)  # Use your project ID
@@ -115,7 +115,7 @@ def create_chip_bounds(clustered_fires):
             vector_data=gpd.GeoDataFrame(
                 geometry=[central_fire_point], crs="EPSG:4326"
             ),
-            resolution=(-375, 375),
+            resolution=(-DEFAULT_SPATIAL_RESOLUTION, DEFAULT_SPATIAL_RESOLUTION),
             output_crs=utm_crs,
             geom=bbox_4326_geojson,
         )
@@ -178,7 +178,7 @@ def fires_from_topleft(top_left, epsg_code, date_to_query, fires):
     fire_array = make_geocube(
         vector_data=fires_in_chip,
         measurements=["bool", "frp"],
-        resolution=(-375, 375),
+        resolution=(-DEFAULT_SPATIAL_RESOLUTION, DEFAULT_SPATIAL_RESOLUTION),
         output_crs=epsg_code,
         fill=0,
         geom=bbox_4326_geojson,
@@ -186,14 +186,13 @@ def fires_from_topleft(top_left, epsg_code, date_to_query, fires):
     return fire_array
 
 
-def ndvi_from_topleft(top_left, epsg, date, resolution=375):
+def ndvi_from_topleft(top_left, epsg, date):
     """
     Fetch vegetation data from the NASA/VIIRS/002/VNP13A1 dataset on GEE.
 
     :param topleft: Coordinates of the top-left corner of the AOI [latitude, longitude].
     :param epsg_code: EPSG code for the coordinate system of the AOI.
     :param date: Date string (YYYY-MM-DD) for querying data.
-    :param resolution: Resolution to resample the data (default: 375 meters).
     :return: Dictionary with data arrays for the specified parameters.
     """
     # Parse the date
@@ -227,7 +226,7 @@ def ndvi_from_topleft(top_left, epsg, date, resolution=375):
     # Select NDVI band and resample
     try:
         ndvi_data = vegetation.select("NDVI").mean().reproject(
-            f'EPSG:{epsg}', scale=resolution
+            f'EPSG:{epsg}', scale=DEFAULT_SPATIAL_RESOLUTION
         )
         # Extract raster data
         data = ndvi_data.sampleRectangle(region=aoi).getInfo()
@@ -290,7 +289,7 @@ def elevation_from_topleft(top_left, epsg, resolution=30):
     # Open the VRT and read the elevation data
     with rasterio.open(vrt_path) as src:
         dst_crs = CRS.from_epsg(epsg)
-        dst_transform = affine.Affine(375, 0.0, top_left[1], 0.0, -375, top_left[0])
+        dst_transform = affine.Affine(DEFAULT_SPATIAL_RESOLUTION, 0.0, top_left[1], 0.0, -DEFAULT_SPATIAL_RESOLUTION, top_left[0])
         elevation_data, tf = read_geospatial_file(aoi, dst_crs, dst_transform, src)
         os.remove(vrt_path)  # Clean up temporary VRT file
     return elevation_data[0]
@@ -315,12 +314,12 @@ def landcover_from_topleft(top_left, epsg):
         "s3://esa-worldcover/v100/2020/ESA_WorldCover_10m_2020_v100_Map_AWS.vrt"
     ) as src:
         dst_crs = CRS.from_epsg(epsg)
-        dst_transform = affine.Affine(375, 0.0, top_left[1], 0.0, -375, top_left[0])
+        dst_transform = affine.Affine(DEFAULT_SPATIAL_RESOLUTION, 0.0, top_left[1], 0.0, -DEFAULT_SPATIAL_RESOLUTION, top_left[0])
         landcover_data, tf = read_geospatial_file(aoi, dst_crs, dst_transform, src)
     return landcover_data[0]
 
 
-def atmospheric_from_topleft(top_left, epsg, date, params, resolution=375):
+def atmospheric_from_topleft(top_left, epsg, date, params):
     """
     Fetch hourly NLDAS data from GEE for a specific date and region.
 
@@ -352,8 +351,7 @@ def atmospheric_from_topleft(top_left, epsg, date, params, resolution=375):
     # Fetch each parameter
     for param in params:
         try:
-            # Select parameter and reproject to specified resolution
-            param_data = nldas.select(param).mean().reproject(crs=f'EPSG:{epsg}', scale=resolution)
+            param_data = nldas.select(param).mean().reproject(crs=f'EPSG:{epsg}', scale=DEFAULT_SPATIAL_RESOLUTION)
             data = param_data.sampleRectangle(region=region).getInfo()
             param_array = np.array(data['properties'][param])
             param_array = np.nan_to_num(param_array, nan=0.0, posinf=0.0, neginf=0.0)

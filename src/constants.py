@@ -11,6 +11,8 @@ DEFAULT_PARAMS = [
     "potential_evaporation",  # Potential evaporation (kg/m²) - indicates dryness and fire-prone conditions.
     "total_precipitation",  # Hourly total precipitation (kg/m²) - critical for assessing wet or dry conditions.
 ]
+DEFAULT_SPATIAL_RESOLUTION = 375
+
 CHIP_SIZE = (64, 64)
 FIRMS_API_KEY = os.environ.get("FIRMS_API_KEY")
 GEE_PROJECT_ID = os.environ.get("GEE_PROJECT_ID")
