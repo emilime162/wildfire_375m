@@ -171,7 +171,7 @@ def fires_from_topleft(top_left, epsg_code, date_to_query, fires):
         fires_in_chip["frp"] = pd.to_numeric(fires_in_chip["frp"])
 
     bbox_4326, utm_crs = buffer_point(
-        aoi_wgs84.centroid, buffer_m=15750, output_4326=True
+        aoi_wgs84.centroid, buffer_m=11750, output_4326=True
     )
     bbox_4326_geojson = json.dumps(mapping(transform(lambda x, y: (y, x), bbox_4326)))
 
