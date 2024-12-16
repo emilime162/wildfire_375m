@@ -25,7 +25,7 @@ from src.geospatial import (
     bounds_to_geojson,
     read_geospatial_file,
 )
-from src.constants import GEE_PROJECT_ID, DEFAULT_SPATIAL_RESOLUTION, TARGET_EPSG_CODE, TARGET_CRS, CHIP_SPACE_LENGTH
+from src.constants import GEE_PROJECT_ID, DEFAULT_SPATIAL_RESOLUTION, TARGET_EPSG_CODE, TARGET_CRS, CHIP_SPACE_LENGTH, CHIP_SPACE_LENGTH_WITH_GEE
 
 try:
     ee.Initialize(project=GEE_PROJECT_ID)  # Use your project ID
@@ -200,8 +200,8 @@ def population_from_topleft(top_left, epsg, date_to_query):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + CHIP_SPACE_LENGTH,
-            bottom=top_left[0] - CHIP_SPACE_LENGTH,
+            right=top_left[1] + CHIP_SPACE_LENGTH_WITH_GEE,
+            bottom=top_left[0] - CHIP_SPACE_LENGTH_WITH_GEE,
             top=top_left[0],
         )
     )
@@ -236,8 +236,8 @@ def ndvi_from_topleft(top_left, epsg, date):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + CHIP_SPACE_LENGTH,
-            bottom=top_left[0] - CHIP_SPACE_LENGTH,
+            right=top_left[1] + CHIP_SPACE_LENGTH_WITH_GEE,
+            bottom=top_left[0] - CHIP_SPACE_LENGTH_WITH_GEE,
             top=top_left[0],
         )
     )
@@ -371,8 +371,8 @@ def atmospheric_from_topleft(top_left, epsg, date, params):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + CHIP_SPACE_LENGTH,
-            bottom=top_left[0] - CHIP_SPACE_LENGTH,
+            right=top_left[1] + CHIP_SPACE_LENGTH_WITH_GEE,
+            bottom=top_left[0] - CHIP_SPACE_LENGTH_WITH_GEE,
             top=top_left[0],
         )
     )
