@@ -1,15 +1,7 @@
 import os
 
 DEFAULT_PARAMS = [
-    # "temperature",  # Air temperature at 2 meters above the surface (°C) - impacts fire ignition and spread.
-    # "specific_humidity",  # Specific humidity at 2 meters above the surface (kg/kg) - affects fuel moisture.
-    # "pressure",  # Surface pressure (Pa) - related to weather conditions and fire behavior.
-    # "wind_u",  # U wind component at 10 meters above the surface (m/s) - horizontal wind in the east-west direction.
-    # "wind_v",  # V wind component at 10 meters above the surface (m/s) - horizontal wind in the north-south direction.
-    # # "longwave_radiation",        # Surface downward longwave radiation (W/m²) - energy balance affecting temperature and humidity.
-    # # "shortwave_radiation",       # Surface downward shortwave radiation (W/m²) - impacts surface temperature.
-    # "potential_evaporation",  # Potential evaporation (kg/m²) - indicates dryness and fire-prone conditions.
-    # "total_precipitation",  # Hourly total precipitation (kg/m²) - critical for assessing wet or dry conditions.
+
     "dewpoint_temperature_2m",
     "temperature_2m",
     "u_component_of_wind_10m",
