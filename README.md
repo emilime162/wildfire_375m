@@ -40,9 +40,18 @@ For each chip:
 - Each day has **two fire masks**: one for daytime and one for nighttime.
 
 ### Atmospheric Data
-The atmospheric data is sourced from **ERA5** and is available on [Google Earth Engine](https://developers.google.com/earth-engine/datasets/catalog/ECMWF_ERA5_LAND_DAILY_AGGR). 
+Atmospheric data is sourced from **ERA5** and is available on [Google Earth Engine](https://developers.google.com/earth-engine/datasets/catalog/ECMWF_ERA5_LAND_DAILY_AGGR). 
 
-For a given chip:
+#### Extracted Bands:
+- `dewpoint_temperature_2m`
+- `temperature_2m`
+- `u_component_of_wind_10m`
+- `v_component_of_wind_10m`
+- `total_evaporation_sum`
+- `surface_pressure`
+- `total_precipitation_sum`
+
+#### Process:
 1. Data is imported from Google Earth Engine.
 2. Extracted for the **Area of Interest (AOI)**.
 3. Resampled to match the **chip’s coordinate reference system (CRS)**, **pixel size**, and **time (1 day)**.
@@ -58,7 +67,7 @@ Elevation data is sourced from **Copernicus DEM** ([link](https://registry.opend
 - The data is reprojected to the chip's **CRS** using Rasterio.
 
 ### Vegetation Data (VNP13A1)
-The vegetation indices are sourced from **VNP13A1** ([link](https://developers.google.com/earth-engine/datasets/catalog/NASA_VIIRS_002_VNP13A1)).
+The vegetation indices are sourced from **VNP13A1** ([link](https://developers.google.com/earth-engine/datasets/catalog/NASA_VIIRS_002_VNP13A1)).The NDVI band is extracted.
 
 For a given chip:
 1. Data is imported from Google Earth Engine.
