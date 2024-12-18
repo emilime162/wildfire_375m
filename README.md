@@ -1,48 +1,92 @@
-## Dataset preparation
-This folder contains the code for generating a dataset for training a fire prediction model. 
+# Project Description
 
-Data sources are all from [Registry of Open Data on AWS](https://registry.opendata.aws/), apart from the fire data which requires an account to access:
+This folder contains the code for generating a dataset designed for training a fire prediction model. The dataset is a **multi-temporal, multi-modal remote sensing collection** for predicting the spread of active wildfires with a temporal resolution of **12 hours (twice daily)**. It covers North America over a **12-year period (2012–2024)**.
 
-| Data source                                                        | Description                                                                                                                                                                                                                                                            |
-|--------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [Copernicus DEM](https://registry.opendata.aws/copernicus-dem/)    | Digital Surface Model (DSM) which represents the surface of the Earth including buildings, infrastructure and vegetation.                                                                                                                                              |
-| [MODIS](https://registry.opendata.aws/modis/)                      | The Moderate Resolution Imaging Spectroradiometer (MODIS) MCD43A4 Version 6 Nadir Bidirectional Reflectance Distribution Function (BRDF)-Adjusted Reflectance (NBAR) dataset is produced daily using 16 days of Terra and Aqua MODIS data at 500 meter (m) resolution. |
-| [ESA Land Cover](https://registry.opendata.aws/esa-worldcover/)    | The European Space Agency (ESA) WorldCover is a global land cover map with 11 different land cover classes produced at 10m resolution based on combination of both Sentinel-1 and Sentinel-2 data.                                                                     |
-| [ERA5 Atmospheric data](https://registry.opendata.aws/ecmwf-era5/) | ERA5 is the fifth generation of ECMWF atmospheric reanalyses of the global climate, and the first reanalysis produced as an operational service.                                                                                                                       |
-| [FIRMS active fire data](https://firms.modaps.eosdis.nasa.gov/) | The Fire Information for Resource Management System (FIRMS) distributes Near Real-Time (NRT) active fire data within 3 hours of satellite observation from the Visible Infrared Imaging Radiometer Suite (VIIRS) aboard S-NPP and NOAA 20 at 375 meter (m) resolution. |
+Each chip contains:
+- Fire masks for **six days**:
+  - **Four days before** the fire event.
+  - The **fire day** itself.
+  - **The next day**.
+- **Two fire masks per day**: daytime and nighttime, capturing fire activity at different times.
+- Auxiliary data for the fire day, including **elevation**, **atmospheric conditions**, and **vegetation information**, to provide critical context for modeling fire behavior.
 
-### Fire masks
-Fire masks represent areas which are actively on fire on a given day. These masks are provided by the VIIRS sensor, with active (and historical) fire hotspot data made available through a [web portal](https://firms.modaps.eosdis.nasa.gov/). Instead of generating a chip for every hotspot, we clustered the fire points and dropped any clusters with less than 25 fire points within a 24 hour period. Then for each remaining cluster - we find the central fire point and create the chip boundary around it. 
+---
+
+## Dataset Preparation
+
+The data sources used are from the following platforms:
+
+| **Data Source**                                                        | **Description**                                                                                                                                                                                                                                                         |
+|------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [Copernicus DEM](https://registry.opendata.aws/copernicus-dem/)        | Digital Surface Model (DSM) representing the Earth's surface, including buildings, infrastructure, and vegetation.                                                                                                                                                     |
+| [VNP13A1 Vegetation Indices](https://developers.google.com/earth-engine/datasets/catalog/NASA_VIIRS_002_VNP13A1) | Provides vegetation indices through a 16-day acquisition process at a **500-meter resolution** from the VIIRS sensor.                                                                                                            |
+| [ESA WorldCover](https://registry.opendata.aws/esa-worldcover/)        | Global land cover map with **11 land cover classes** at **10-meter resolution**, combining Sentinel-1 and Sentinel-2 data.                                                                                                       |
+| [ERA5 Atmospheric Data](https://developers.google.com/earth-engine/datasets/catalog/ECMWF_ERA5_LAND_DAILY_AGGR)  | Reanalysis dataset providing consistent atmospheric data with enhanced spatial and temporal resolution.                                                                                                                          |
+| [GHSL Population Data](https://developers.google.com/earth-engine/datasets/catalog/JRC_GHSL_P2023A_GHS_POP?hl=en#description) | Represents residential population distribution as raster data, providing estimates between 1975 and 2030 derived from census data disaggregated into grid cells.                                                                 |
+| [FIRMS Active Fire Data](https://firms.modaps.eosdis.nasa.gov/)        | Near Real-Time (NRT) active fire data available within 3 hours of observation from VIIRS at **375-meter resolution**.                                                                                                           |
+
+---
+
+### Fire Masks
+Fire masks represent areas actively on fire on a given day. These masks are generated using **VIIRS active fire hotspot data** available through [FIRMS](https://firms.modaps.eosdis.nasa.gov/). 
+
+Instead of generating a chip for every hotspot:
+1. Fire points are **clustered**.
+2. Clusters with **fewer than 25 fire points within a 24-hour period** are dropped.
+
+For each chip:
+- Fire masks are included for:
+  - **Four days before the fire event**.
+  - The **fire day** itself.
+  - **The next day**.
+- Each day has **two fire masks**: one for daytime and one for nighttime.
+
+---
+
+### Atmospheric Data
+The atmospheric data is sourced from **ERA5** and is available on [Google Earth Engine](https://developers.google.com/earth-engine/datasets/catalog/ECMWF_ERA5_LAND_DAILY_AGGR). 
+
+For a given chip:
+1. Data is imported from Google Earth Engine.
+2. Extracted for the **Area of Interest (AOI)**.
+3. Resampled to match the **chip’s coordinate reference system (CRS)**, **pixel size**, and **time (1 day)**.
+
+---
+
+### Land Cover Data
+Land cover data is sourced from **ESA WorldCover** ([link](https://registry.opendata.aws/esa-worldcover/)).
+
+- These data are reprojected to the chip's **CRS** using [Rasterio](https://rasterio.readthedocs.io/en/latest/).
+
+---
+
+### Elevation Data
+Elevation data is sourced from **Copernicus DEM** ([link](https://registry.opendata.aws/copernicus-dem/)).
+
+- The data is reprojected to the chip's **CRS** using Rasterio.
+
+---
+
+### Vegetation Data (VNP13A1)
+The vegetation indices are sourced from **VNP13A1** ([link](https://developers.google.com/earth-engine/datasets/catalog/NASA_VIIRS_002_VNP13A1)).
+
+For a given chip:
+1. Data is imported from Google Earth Engine.
+2. Extracted for the **AOI**.
+3. Resampled to match the **chip’s CRS**, **pixel size**, and **time (1 day)**.
+
+---
+
+### Population Data
+Population data is sourced from the **GHSL Population Data** ([link](https://developers.google.com/earth-engine/datasets/catalog/JRC_GHSL_P2023A_GHS_POP?hl=en)).
+
+---
+
+## Processing Workflow
+The data preparation workflow is represented below:
 
 <p align="center">
-<img src="images/fire_chips.png" width="650">
+  <img src="images/workflow.svg" width="750">
 </p>
 
-For each chip we process the output for the active fires for 2 concurrent days:
-
-<p align="center">
-<img src="images/fire_masks.png" width="450">
-</p>
-
-### Atmospheric data
-The atmospheric data we are using is all available on s3 in [zarr](https://zarr.readthedocs.io/en/stable/) format. It is publicly available with information about the bucket listed [here](https://registry.opendata.aws/ecmwf-era5/). For these data, for a given chip, we create a connection to the appropriate zarr file and resample to the appropriate coordinate reference system, pixel size and time (1 day) to the bounds for the given day. These data are then written to disk.
-
-## Landcover data 
-For landcover, we use ESA worldcover data, available on s3 [here](https://registry.opendata.aws/esa-worldcover/). We reproject these data directly to the appropriate CRS for each chip using [Rasterio](https://rasterio.readthedocs.io/en/latest/)
-
-## Elevation data
-For elevation, we use ESA worldcover data, available on s3 [here](https://registry.opendata.aws/copernicus-dem/). We reproject these data directly to the appropriate CRS for each chip using Rasterio
-
-## MODIS data
-We query MODIS data using [astrea’s STAC](https://eod-catalog-svc-prod.astraea.earth/). The data on the STAC is in requester-pays bucket, so in order to avoid charges we update the links in the response to point to the free bucket, which will be slightly slower as the data are not in COGs. The NDVI is then processed thereafter using rasterio:
-
-## Processing workflow
-The workflow is represented below:
-
-<p align="center">
-<img src="images/workflow.svg" width="750">
-</p>
-
-In total, 15436 chips with no spatio-temporal overlap were generated for training. Each feature is represented as a 64x64 pixel image, where each pixel is 500m on the Earth. For each fire, images for all features were placed in a single 'folder' on S3, with data stored in numpy (`.npy`) files.
-
-Note that sensitive data including API keys are passed in as environment variables
+**Note**: Sensitive data, such as API keys, are passed in as environment variables.
