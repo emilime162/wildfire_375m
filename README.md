@@ -12,6 +12,34 @@ Each chip contains:
 - **Two fire masks per day**: daytime and nighttime, capturing fire activity at different times.
 - Auxiliary data for the fire day, including **elevation**, **atmospheric conditions**, and **vegetation information**, to provide critical context for modeling fire behavior.
 
+# Prerequisites
+## Prerequisites
+
+To create the dataset, ensure you meet the following prerequisites:
+
+1. **Access to Google Earth Engine (GEE):**
+   - Sign up for a [Google Earth Engine account](https://earthengine.google.com/).
+   - Set up the GEE Python API on your machine.
+
+2. **Install Required Python Packages:**
+   - Install all necessary dependencies listed in the `requirements.txt` file by running:
+     ```bash
+     pip install -r requirements.txt
+     ```
+
+3. **Authenticate with GEE:**
+   - After installing the GEE Python API, authenticate your account by running:
+     ```bash
+     earthengine authenticate
+     ```
+   - Follow the instructions to log in with your Google account and link it to your project.
+
+4. **Set Up Your Google Earth Engine Project ID:**
+   - Ensure you have access to a GEE project.
+   - Import your project ID into the script via the `constants.py` file or set it as an environment variable. 
+
+
+
 ## Dataset Preparation
 
 The data sources used are from the following platforms:
