@@ -25,7 +25,7 @@ from src.geospatial import (
     bounds_to_geojson,
     read_geospatial_file,
 )
-from src.constants import GEE_PROJECT_ID, DEFAULT_SPATIAL_RESOLUTION, TARGET_EPSG_CODE, TARGET_CRS, CHIP_SPACE_LENGTH, CHIP_SPACE_LENGTH_WITH_GEE
+from src.constants import GEE_PROJECT_ID, DEFAULT_SPATIAL_RESOLUTION, TARGET_EPSG_CODE, TARGET_CRS, SIDE_LEN, SIDE_LEN_OFFSET, CHIP_SIZE
 
 try:
     ee.Initialize(project=GEE_PROJECT_ID)  # Use your project ID
@@ -141,8 +141,8 @@ def fires_from_topleft(top_left, epsg_code, date_to_query, fires):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + CHIP_SPACE_LENGTH,
-            bottom=top_left[0] - CHIP_SPACE_LENGTH,
+            right=top_left[1] + SIDE_LEN,
+            bottom=top_left[0] - SIDE_LEN,
             top=top_left[0],
         )
     )
@@ -200,8 +200,8 @@ def population_from_topleft(top_left, epsg, date_to_query):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + CHIP_SPACE_LENGTH_WITH_GEE,
-            bottom=top_left[0] - CHIP_SPACE_LENGTH_WITH_GEE,
+            right=top_left[1] + SIDE_LEN - SIDE_LEN_OFFSET,
+            bottom=top_left[0] - SIDE_LEN + SIDE_LEN_OFFSET,
             top=top_left[0],
         )
     )
@@ -217,6 +217,8 @@ def population_from_topleft(top_left, epsg, date_to_query):
     population_data = population.reproject(crs=f'EPSG:{epsg}', scale=375).sampleRectangle(region).getInfo()
     population_array = np.array(population_data['properties']['population_count'])
     population_array = np.nan_to_num(population_array, nan=0.0, posinf=0.0, neginf=0.0)
+    if population_array.shape != CHIP_SIZE:
+        return population_array[:CHIP_SIZE[0], :CHIP_SIZE[1]]
     return population_array
 
 
@@ -236,8 +238,8 @@ def ndvi_from_topleft(top_left, epsg, date):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + CHIP_SPACE_LENGTH_WITH_GEE,
-            bottom=top_left[0] - CHIP_SPACE_LENGTH_WITH_GEE,
+            right=top_left[1] + SIDE_LEN - SIDE_LEN_OFFSET,
+            bottom=top_left[0] - SIDE_LEN + SIDE_LEN_OFFSET,
             top=top_left[0],
         )
     )
@@ -250,7 +252,6 @@ def ndvi_from_topleft(top_left, epsg, date):
             .filterBounds(aoi) \
             .filterDate(start_date, end_date)
         filtered_size = vegetation.size().getInfo()
-        #print(f"Number of images in filtered collection: {filtered_size}")
         if filtered_size == 0:
             print("No images found for the specified AOI and date range.")
             return None
@@ -263,13 +264,14 @@ def ndvi_from_topleft(top_left, epsg, date):
             f'EPSG:{epsg}', scale=DEFAULT_SPATIAL_RESOLUTION
         )
         # Extract raster data
-        data = ndvi_data.sampleRectangle(region=aoi).getInfo()
+        data = ndvi_data.sampleRectangle(region=aoi, defaultValue=-1).getInfo()
         if not data:
             print("No NDVI data found for the specified AOI and date.")
             return None
         # Convert the raster data into a NumPy array
         ndvi_array = np.array(data['properties']['NDVI'])
-        print(f"Fetched NDVI raster with shape {ndvi_array.shape}.")
+        if ndvi_array.shape != CHIP_SIZE:
+            return ndvi_array[:CHIP_SIZE[0], :CHIP_SIZE[1]]
         return ndvi_array
     except Exception as e:
         print(f"Error fetching NDVI data: {e}")
@@ -289,8 +291,8 @@ def elevation_from_topleft(top_left, epsg, resolution=30):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + CHIP_SPACE_LENGTH,
-            bottom=top_left[0] - CHIP_SPACE_LENGTH,
+            right=top_left[1] + SIDE_LEN,
+            bottom=top_left[0] - SIDE_LEN,
             top=top_left[0],
         )
     )
@@ -339,8 +341,8 @@ def landcover_from_topleft(top_left, epsg):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + CHIP_SPACE_LENGTH,
-            bottom=top_left[0] - CHIP_SPACE_LENGTH,
+            right=top_left[1] + SIDE_LEN,
+            bottom=top_left[0] - SIDE_LEN,
             top=top_left[0],
         )
     )
@@ -371,8 +373,8 @@ def atmospheric_from_topleft(top_left, epsg, date, params):
     aoi = bounds_to_geojson(
         rasterio.coords.BoundingBox(
             left=top_left[1],
-            right=top_left[1] + CHIP_SPACE_LENGTH_WITH_GEE,
-            bottom=top_left[0] - CHIP_SPACE_LENGTH_WITH_GEE,
+            right=top_left[1] + SIDE_LEN - SIDE_LEN_OFFSET,
+            bottom=top_left[0] - SIDE_LEN + SIDE_LEN_OFFSET,
             top=top_left[0],
         )
     )
@@ -388,7 +390,10 @@ def atmospheric_from_topleft(top_left, epsg, date, params):
             data = param_data.sampleRectangle(region=region).getInfo()
             param_array = np.array(data['properties'][param])
             param_array = np.nan_to_num(param_array, nan=0.0, posinf=0.0, neginf=0.0)
-            results[param] = param_array
+            if param_array.shape != CHIP_SIZE:
+                results[param] = param_array[:CHIP_SIZE[0], :CHIP_SIZE[1]]
+            else:
+                results[param] = param_array
         except Exception as e:
             print(f"Error fetching parameter '{param}': {e}")
             results[param] = None
