@@ -12,7 +12,6 @@ Each chip contains:
 - **Two fire masks per day**: daytime and nighttime, capturing fire activity at different times.
 - Auxiliary data for the fire day, including **elevation**, **atmospheric conditions**, and **vegetation information**, to provide critical context for modeling fire behavior.
 
-# Prerequisites
 ## Prerequisites
 
 To create the dataset, ensure you meet the following prerequisites:
@@ -32,7 +31,7 @@ To create the dataset, ensure you meet the following prerequisites:
      ```bash
      earthengine authenticate
      ```
-   - Follow the instructions to log in with your Google account and link it to your project.
+   - Follow the instructions linked here (https://developers.google.com/earth-engine/guides/auth) to log in with your Google account and link it to your project.
 
 4. **Set Up Your Google Earth Engine Project ID:**
    - Ensure you have access to a GEE project.
@@ -66,6 +65,31 @@ For each chip:
   - The **fire day** itself.
   - **The next day**.
 - Each day has **two fire masks**: one for daytime and one for nighttime.
+
+### What is a Chip?
+A **chip** is a fixed-size, spatially bounded subset of the larger geospatial dataset, representing a specific region of interest. Each chip:
+
+1. **Geospatial Focus**:
+   - Represents a specific geographic area, typically structured as a grid (e.g., 64x64 cells) at a predefined spatial resolution (e.g., 375m per cell).
+
+2. **Multi-Temporal Data**:
+   - Includes data collected over multiple time points, such as fire masks and auxiliary features, providing a temporal snapshot of wildfire activity and conditions.
+
+3. **Multi-Modal Layers**:
+   - Contains various types of data, such as:
+     - **Fire Masks**: Binary grids indicating fire presence for both daytime and nighttime.
+     - **Elevation**: Topographic data crucial for understanding fire spread.
+     - **Atmospheric Conditions**: Data like temperature, humidity, surface pressure, total precipitation and wind.
+     - **Vegetation Information**: Indices like NDVI to understand fuel availability.
+     - **Population Data**: population_count is extracted.
+
+4. **Self-Contained Units**:
+   - Each chip is a self-contained unit with all necessary features and labels for machine learning models. This modular structure simplifies processing and enables scalable analysis.
+
+5. **Temporal Evolution**:
+   - Captures the progression of wildfire activity and conditions over a six-day period, offering insights into both short-term and long-term patterns.
+
+By organizing data into chips, this dataset provides a structured, consistent format that is optimized for training predictive models on wildfire behavior and spread. This approach also ensures efficient handling of large-scale geospatial data while preserving the temporal and spatial granularity required for accurate predictions.
 
 ### Atmospheric Data
 Atmospheric data is sourced from **ERA5** and is available on [Google Earth Engine](https://developers.google.com/earth-engine/datasets/catalog/ECMWF_ERA5_LAND_DAILY_AGGR). 
