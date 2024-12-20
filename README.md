@@ -65,10 +65,10 @@ Run the script from the command line:
 python extract.py
 ```
 The script will:
-Unzip the fire data files.
-Cluster fire points and create metadata for each chip.
-Extract geospatial features (e.g., NDVI, landcover, atmospheric data) for each chip.
-Save the processed data in the specified output directory.
+- Unzip the fire data files.
+- Cluster fire points and create metadata for each chip.
+- Extract geospatial features (e.g., NDVI, landcover, atmospheric data) for each chip.
+- Save the processed data in the specified output directory.
 
 4. **Verify the Output**
 After the script completes:
