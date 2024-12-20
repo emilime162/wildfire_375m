@@ -37,7 +37,30 @@ To create the dataset, ensure you meet the following prerequisites:
    - Ensure you have access to a GEE project.
    - Import your project ID into the script via the `constants.py` file or set it as an environment variable. 
 
+## How to extract the data
+1. **Download the fire zip data**:
+You can download fire data from the NASA FIRMS website(https://firms2.modaps.eosdis.nasa.gov/country/). Select your region and time period to download zipped CSV files (e.g., fire_YYYY.zip).
+Place all the downloaded files in a folder, such as ./data.
+2. **Update the script**
+You can use the extract.py to extract all the data -- Edit the fires variable in the script to include all your zip file paths.
+3. **Run the script**
+Run the script from the command line:
 
+```bash
+python extract.py
+```
+The script will:
+Unzip the fire data files.
+Cluster fire points and create metadata for each chip.
+Extract geospatial features (e.g., NDVI, landcover, atmospheric data) for each chip.
+Save the processed data in the specified output directory.
+4. **Verify the Output**
+After the script completes:
+
+The output_fp directory will contain:
+Processed Chips: Subdirectories for each geographical chip.
+Merged GeoPackage: fires.gpkg file containing all fire data.
+Cleaned and filtered chips with consistent data.
 
 ## Dataset Preparation
 
