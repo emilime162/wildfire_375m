@@ -2,7 +2,7 @@
 
 ## Description
 
-This folder contains the code for generating a dataset designed for training a fire prediction model. The dataset is a **multi-temporal, multi-modal remote sensing collection** for predicting the spread of active wildfires with a temporal resolution of **12 hours (twice daily)**. It covers North America over a **12-year period (2012–2024)**.
+This folder contains the code for generating a dataset designed for training a fire prediction model. The dataset is a **multi-temporal, multi-modal remote sensing collection** for predicting the spread of active wildfires with a temporal resolution of **12 hours (twice daily)**. It covers North America over a **12-year period (2012–2023)**.
 
 Each chip contains:
 - Fire masks for **six days**:
