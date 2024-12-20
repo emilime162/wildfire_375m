@@ -188,7 +188,11 @@ The data preparation workflow is represented below:
   <img src="images/workflow.svg" width="750">
 </p>
 
-
+## Data Plotting 
+The data plotting is represented below: 
+<p align="center">
+  <img src="plotting.png" width="750">
+</p>
 
 ## Reference
 
