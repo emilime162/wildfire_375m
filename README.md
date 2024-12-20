@@ -10,7 +10,7 @@ Each chip contains:
   - The **fire day** itself.
   - **The next day**.
 - **Two fire masks per day**: daytime and nighttime, capturing fire activity at different times.
-- Auxiliary data for the fire day, including **elevation**, **atmospheric conditions**, and **vegetation information**, to provide critical context for modeling fire behavior.
+- Auxiliary data for the fire day, including **elevation**, **atmospheric conditions**, and **vegetation information**, **population**, **landcover** for each day, to provide critical context for modeling fire behavior.
 
 ## Prerequisites
 
