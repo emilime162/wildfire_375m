@@ -37,12 +37,27 @@ To create the dataset, ensure you meet the following prerequisites:
    - Ensure you have access to a GEE project.
    - Import your project ID into the script via the `constants.py` file or set it as an environment variable. 
 
+## Project File Overview
+
+**For Long-Term Data Generation (e.g., 10 years):**
+Use extract.py to process a large dataset spanning multiple years.
+Detailed instructions for extracting the data are provided in the next section, How to Extract the Data.
+
+**For Small Batch Data Generation and Visualization:**
+Use _PredictionDataCreation.ipynb to generate and visualize a small batch of data.
+
+**Utilities:**
+All utility functions used for processing are located in the src folder.
+
 ## How to extract the data
+
 1. **Download the fire zip data**:
 You can download fire data from the NASA FIRMS website(https://firms2.modaps.eosdis.nasa.gov/country/). Select your region and time period to download zipped CSV files (e.g., fire_YYYY.zip).
 Place all the downloaded files in a folder, such as ./data.
+
 2. **Update the script**
 You can use the extract.py to extract all the data -- Edit the fires variable in the script to include all your zip file paths.
+
 3. **Run the script**
 Run the script from the command line:
 
@@ -54,6 +69,7 @@ Unzip the fire data files.
 Cluster fire points and create metadata for each chip.
 Extract geospatial features (e.g., NDVI, landcover, atmospheric data) for each chip.
 Save the processed data in the specified output directory.
+
 4. **Verify the Output**
 After the script completes:
 
@@ -89,7 +105,8 @@ For each chip:
   - **The next day**.
 - Each day has **two fire masks**: one for daytime and one for nighttime.
 
-### What is a Chip?
+#### What is a Chip?
+
 A **chip** is a fixed-size, spatially bounded subset of the larger geospatial dataset, representing a specific region of interest. Each chip:
 
 1. **Geospatial Focus**:
@@ -144,7 +161,7 @@ Elevation data is sourced from **Copernicus DEM** ([link](https://registry.opend
 ### Vegetation Data (VNP13A1)
 The vegetation indices are sourced from **VNP13A1** ([link](https://developers.google.com/earth-engine/datasets/catalog/NASA_VIIRS_002_VNP13A1)).The NDVI band is extracted.
 
-For a given chip:
+#### Process:
 1. Data is imported from Google Earth Engine.
 2. Extracted for the **AOI**.
 3. Resampled to match the **chip’s CRS**, **pixel size**, and **time (1 day)**.
@@ -170,6 +187,8 @@ The data preparation workflow is represented below:
 <p align="center">
   <img src="images/workflow.svg" width="750">
 </p>
+
+
 
 ## Reference
 
