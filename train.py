@@ -9,13 +9,18 @@ from openstl.api import BaseExperiment
 from openstl.utils import create_parser, default_parser
 
 FEATURES = [
-    "todays_fires",
-    "todays_frp",
+    "todays_day_fires",
+    "todays_day_frp",
+    "todays_night_fires",
+    "todays_night_frp",
     "ndvi",
     "landcover",
     "elevation",
     "population",
     "temperature_2m",
+    "u_component_of_wind_10m",
+    "v_component_of_wind_10m",
+    "total_precipitation_sum",
 ]
 
 
@@ -28,32 +33,33 @@ class WildfireDataset(Dataset):
         """
         super().__init__()
         self.data_dir = data_dir
-        input = defaultdict(list)
-        output = []
-        for child in Path(data_dir).iterdir():
-            if not child.is_dir():
-                continue
-            for feature in FEATURES:
-                input[feature].append(np.load(child / f"{feature}.npy"))
-            output.append(np.load(child / "tomorrows_fires.npy"))
-        self.data = np.stack(list(input.values()), axis=1)
-        self.labels = np.array(output)[:, np.newaxis, :, :]
-        self.labels = np.repeat(self.labels, len(FEATURES), axis=1)
+        self.data_list = []
+        self.label_list = []
+        for chip_dir in Path(data_dir).iterdir():
+            input = defaultdict(list)
+            output = []
+            for daily in sorted(chip_dir.iterdir()):
+                if not daily.is_dir():
+                    continue
+                for feature in FEATURES:
+                    input[feature].append(np.load(daily / f"{feature}.npy"))
+            output.append(np.load(chip_dir / "tomorrows_fires.npy"))
+            data = np.stack(list(input.values()), axis=1)
+            labels = np.array(output)[:, np.newaxis, :, :]
+            labels = np.repeat(labels, len(FEATURES), axis=1)
+            self.data_list.append(data)
+            self.label_list.append(labels)
         self.idx_in = idx_in
         self.idx_out = idx_out
-        self.valid_idx = np.array(
-            range(-idx_in[0], self.data.shape[0] - idx_out[-1] - 1)
-        )
-
-        self.mean = self.data.mean(axis=(0, 2, 3), keepdims=True)
-        self.std = self.data.std(axis=(0, 2, 3), keepdims=True)
+        self.mean = self.data_list.mean(axis=(0, 1, 3, 4), keepdims=True)
+        self.std = self.data_list.std(axis=(0, 1, 3, 4), keepdims=True)
         self.transform = None
 
     def __len__(self):
         """
         Returns the total number of chips in the dataset
         """
-        return self.valid_idx.shape[0]
+        return len(self.data_list)
 
     def __getitem__(self, idx):
         """
@@ -65,20 +71,21 @@ class WildfireDataset(Dataset):
         Returns:
             dict: A dictionary containing loaded features and label
         """
-        index = self.valid_idx[idx]
+        data, labels = self.data_list[idx], self.label_list[idx]
         # Get input sequence: shape will be [timesteps, num_of_features, height, width]
-        data = torch.tensor(self.data[index + self.idx_in], dtype=torch.float32)
-        label = torch.tensor(self.labels[index + self.idx_out], dtype=torch.float32)
+        input = torch.tensor(data[self.idx_in], dtype=torch.float32)
+        output = torch.tensor(labels[self.idx_out], dtype=torch.float32)
 
-        return data, label
+        return input, output
 
 
-batch_size = 2
-pre_seq_length = aft_seq_length = 1
+batch_size = 64
+pre_seq_length = 5
+aft_seq_length = 1
 
-train_set = WildfireDataset("./dataset/train", [0], [0])
-val_set = WildfireDataset("./dataset/test", [0], [0])
-test_set = WildfireDataset("./dataset/test", [0], [0])
+train_set = WildfireDataset("./dataset/train", [-4, -3, -2, -1, 0], [0])
+val_set = WildfireDataset("./dataset/val", [-4, -3, -2, -1, 0], [0])
+test_set = WildfireDataset("./dataset/test", [-4, -3, -2, -1, 0], [0])
 dataloader_train = torch.utils.data.DataLoader(
     train_set, batch_size=batch_size, shuffle=True, pin_memory=True
 )
@@ -95,12 +102,12 @@ custom_training_config = {
     "total_length": pre_seq_length + aft_seq_length,
     "batch_size": batch_size,
     "val_batch_size": batch_size,
-    "epoch": 3,
+    "epoch": 100,
     "lr": 0.001,
-    "metrics": ["mse", "mae"],
+    "metrics": ["mse", "mae"],  # FIXME: use precision/recall/F1 instead
     "ex_name": "custom_exp",
     "dataname": "custom",
-    "in_shape": [10, 7, 64, 64],
+    "in_shape": [10, 12, 64, 64],
 }
 
 custom_model_config = {
